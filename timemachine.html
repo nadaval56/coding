@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>מכונת הזמן של הקוד</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#050a05;font-family:'Courier New',monospace;color:#33ff33;}
+    input[type=number],input[type=text]{
+      background:#030803;border:1px solid #1a5c1a;color:#33ff33;
+      font-family:'Courier New',monospace;padding:8px 12px;font-size:15px;
+      outline:none;width:100%;border-radius:2px;
+    }
+    input:focus{border-color:#33ff33;box-shadow:0 0 8px #33ff3344;}
+    input::placeholder{color:#1a4c1a;}
+    button{font-family:'Courier New',monospace;cursor:pointer;transition:all 0.15s;border-radius:2px;}
+    @keyframes blink   {50%{opacity:0}}
+    @keyframes pulse   {0%,100%{opacity:1}50%{opacity:0.6}}
+    @keyframes fadeUp  {from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes flashBug{0%,100%{background:rgba(255,80,0,.10)}50%{background:rgba(255,80,0,.26)}}
+    @keyframes glow    {0%,100%{box-shadow:0 0 20px #ffaa00,0 0 40px #ff8800}50%{box-shadow:0 0 35px #ffcc00,0 0 70px #ffaa00}}
+    @keyframes slideIn {from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .btn-green{background:rgba(50,255,50,.12);border:1px solid #33ff33;color:#33ff33;
+               text-shadow:0 0 8px #33ff33;padding:10px 20px;font-size:14px;letter-spacing:1px;}
+    .btn-green:hover{background:rgba(50,255,50,.22);}
+    .btn-green:disabled{opacity:.35;cursor:not-allowed;}
+    .btn-dim{background:rgba(0,20,0,.5);border:1px solid #1a5c1a;color:#99ff99;padding:10px 14px;font-size:14px;}
+    .btn-dim:hover{background:rgba(50,255,50,.08);border-color:#33ff33;}
+    .btn-red{background:rgba(255,50,50,.15);border:1px solid #ff4444;color:#ff6666;
+             text-shadow:0 0 8px #ff4444;padding:10px 20px;font-size:14px;letter-spacing:1px;}
+    /* LLM card styles */
+    .card-flip{perspective:1000px;cursor:pointer;}
+    .card-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .5s;}
+    .card-inner.flipped{transform:rotateY(180deg);}
+    .card-face{position:absolute;width:100%;height:100%;backface-visibility:hidden;
+               border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center;}
+    .card-back{transform:rotateY(180deg);}
+    /* Python screen */
+    .py-screen{background:#0d0d0d;color:#e8e8e8;}
+    .py-code-line{padding:7px 14px;font-size:13px;direction:ltr;text-align:left;
+                  transition:background 0.2s,color 0.2s;display:flex;align-items:center;gap:8px;}
+    .py-code-line.active{background:rgba(255,255,255,0.12);color:#ffffff;border-left:3px solid #ffffff;}
+    .py-code-line.inactive{border-left:3px solid transparent;color:#666;}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef} = React;
+
+const SCREENS=[
+  {id:0,era:"1940s",label:"בינארי"},
+  {id:1,era:"1950s",label:"אסמבלי"},
+  {id:2,era:"1970s",label:"שפת C"},
+  {id:3,era:"2000s",label:"Python + LED"},
+  {id:4,era:"2020s",label:"בינה מלאכותית"},
+];
+
+const DM={color:"#1a5c1a"};
+const G={color:"#33ff33",textShadow:"0 0 10px #33ff33"};
+
+const Panel=({title,children,style={}})=>(
+  <div style={{border:"1px solid #2a6c2a",borderRadius:4,overflow:"hidden",background:"#050a05",...style}}>
+    <div style={{background:"#0a1f0a",padding:"5px 12px",fontSize:11,...DM,letterSpacing:3,borderBottom:"1px solid #1a5c1a"}}>{title}</div>
+    {children}
+  </div>
+);
+
+// ═══════════════════════════════════════════════════
+// SCREEN 1 — BINARY
+// ═══════════════════════════════════════════════════
+function BinaryScreen(){
+  const[dec,setDec]=useState("");
+  const[bin,setBin]=useState("");
+  const[decSteps,setDecSteps]=useState([]);
+  const[binResult,setBinResult]=useState(null);
+
+  function handleDec(v){
+    setDec(v);setBin("");setBinResult(null);
+    const n=parseInt(v);
+    if(isNaN(n)||n<0||n>255){setDecSteps([]);return;}
+    if(n===0){setDecSteps([{num:0,q:0,r:0}]);return;}
+    const s=[];let num=n;
+    while(num>0){s.push({num,q:Math.floor(num/2),r:num%2});num=Math.floor(num/2);}
+    setDecSteps(s);
+  }
+
+  function handleBin(v){
+    setBin(v);setDec("");setDecSteps([]);
+    if(/^[01]+$/.test(v))setBinResult(parseInt(v,2));
+    else setBinResult(null);
+  }
+
+  const binaryResult=decSteps.map(s=>s.r).reverse().join("");
+  const binBreakdown=bin.replace(/[^01]/g,"").split("").reverse().map((bit,i)=>({bit,pos:i,val:bit==="1"?Math.pow(2,i):0})).reverse();
+
+  return(
+    <div style={{width:"100%",maxWidth:760}}>
+      <div style={{textAlign:"center",marginBottom:18}}>
+        <div style={{fontSize:11,...DM,letterSpacing:4,marginBottom:4}}>◄ מכונת הזמן של הקוד ► 1940s</div>
+        <div style={{fontSize:20,fontWeight:"bold",...G,letterSpacing:2}}>מערכת הבינארי</div>
+        <div style={{fontSize:12,color:"#99ff99",marginTop:6}}>מחשבים מדברים רק ב-0 ו-1</div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        {/* DEC → BIN */}
+        <Panel title="◄ עשרוני ← בינארי ►">
+          <div style={{padding:"12px 14px",background:"#050a05"}}>
+            <div style={{fontSize:11,...DM,marginBottom:6}}>הכנס מספר (0–255)</div>
+            <input value={dec} onChange={e=>handleDec(e.target.value)} placeholder="למשל: 42" type="number" min="0" max="255"
+                   style={{background:"#030803",color:"#33ff33",border:"1px solid #1a5c1a",padding:"8px 12px",fontSize:15,width:"100%",fontFamily:"monospace",outline:"none"}}/>
+            {decSteps.length>0&&(
+              <div style={{marginTop:12}}>
+                <div style={{fontSize:11,...DM,marginBottom:6,letterSpacing:2}}>שלבי החלוקה ב-2:</div>
+                {decSteps.map((s,i)=>(
+                  <div key={i} style={{fontSize:13,color:"#99ff99",lineHeight:1.9,direction:"ltr",textAlign:"left"}}>
+                    <span style={{color:"#668866"}}>{s.num}</span>
+                    <span style={{color:"#99ff99"}}> ÷ 2 = </span>
+                    <span style={{color:"#668866"}}>{s.q}</span>
+                    <span style={{color:"#99ff99"}}> שארית </span>
+                    <span style={{color:"#33ff33",textShadow:"0 0 6px #33ff33",fontWeight:"bold"}}>{s.r}</span>
+                  </div>
+                ))}
+                <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid #1a3a1a",fontSize:11,...DM}}>קרא שאריות מלמטה למעלה ↑</div>
+                <div style={{fontSize:24,letterSpacing:6,...G,direction:"ltr",textAlign:"left",marginTop:4}}>{binaryResult}</div>
+              </div>
+            )}
+          </div>
+        </Panel>
+
+        {/* BIN → DEC */}
+        <Panel title="◄ בינארי ← עשרוני ►">
+          <div style={{padding:"12px 14px",background:"#050a05"}}>
+            <div style={{fontSize:11,...DM,marginBottom:6}}>הכנס בינארי (0 ו-1 בלבד)</div>
+            <input value={bin} onChange={e=>handleBin(e.target.value)} placeholder="למשל: 101010"
+                   style={{direction:"ltr",textAlign:"left",background:"#030803",color:"#33ff33",border:"1px solid #1a5c1a",padding:"8px 12px",fontSize:15,width:"100%",fontFamily:"monospace",outline:"none"}}/>
+            {binBreakdown.length>0&&(
+              <div style={{marginTop:12}}>
+                <div style={{fontSize:11,...DM,marginBottom:8,letterSpacing:2}}>ערכי המיקומים:</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",direction:"ltr"}}>
+                  {binBreakdown.map((b,i)=>(
+                    <div key={i} style={{textAlign:"center",minWidth:34,
+                      background:"#050a05",
+                      borderRadius:3,padding:"4px 2px",
+                      border:`1px solid ${b.bit==="1"?"#2a6c2a":"#1a3a1a"}`}}>
+                      <div style={{fontSize:9,color:"#1a6c1a"}}>2^{b.pos}</div>
+                      <div style={{fontSize:18,color:b.bit==="1"?"#33ff33":"#1a5c1a",fontWeight:"bold"}}>{b.bit}</div>
+                      <div style={{fontSize:11,color:b.bit==="1"?"#99ff99":"#1a4c1a",borderTop:"1px solid #1a2a1a",paddingTop:2}}>{b.val}</div>
+                    </div>
+                  ))}
+                </div>
+                {binResult!==null&&(
+                  <div style={{marginTop:12,paddingTop:8,borderTop:"1px solid #1a3a1a"}}>
+                    <div style={{fontSize:11,color:"#99ff99",direction:"ltr",textAlign:"left"}}>
+                      {binBreakdown.filter(b=>b.bit==="1").map(b=>`${b.val}`).join(" + ")} =
+                    </div>
+                    <div style={{fontSize:28,...G,marginTop:4}}>{binResult}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </Panel>
+      </div>
+
+      <div style={{marginTop:14,border:"1px solid #1a5c1a",borderRadius:4,padding:"10px 14px",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,background:"#050a05"}}>
+        {[[0,"0000"],[1,"0001"],[2,"0010"],[3,"0011"],[4,"0100"],[5,"0101"],[6,"0110"],[7,"0111"]].map(([d,b])=>(
+          <div key={d} style={{textAlign:"center",fontSize:12}}>
+            <span style={{color:"#668866"}}>{d}</span>
+            <span style={{color:"#1a5c1a"}}> = </span>
+            <span style={{...G}}>{b}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Explanation box at bottom */}
+      <div style={{marginTop:14,border:"1px solid #2a6c2a",borderRadius:4,background:"#050a05",padding:"14px 18px",direction:"rtl"}}>
+        <div style={{fontSize:13,...G,marginBottom:8,letterSpacing:2}}>💡 איך זה עובד?</div>
+        <div style={{fontSize:13,color:"#ccffcc",lineHeight:1.9}}>
+          במערכת הבינארית יש רק שתי ספרות: <span style={{color:"#33ff33",fontWeight:"bold"}}>0</span> ו-<span style={{color:"#33ff33",fontWeight:"bold"}}>1</span>.<br/>
+          כל מיקום שווה <strong>כפול</strong> מהמיקום הקודם: 1, 2, 4, 8, 16, 32...<br/>
+          <span style={{color:"#ffff66"}}>עשרוני ← בינארי:</span> מחלקים ב-2 שוב ושוב, קוראים את השאריות <strong>מלמטה למעלה</strong>.<br/>
+          <span style={{color:"#ffff66"}}>בינארי ← עשרוני:</span> כל ספרה "1" שווה 2 בחזקת המיקום שלה — <strong>מחברים הכל</strong>.<br/>
+          <span style={{fontSize:12,color:"#88cc88"}}>לדוגמה: 1011 = 8+0+2+1 = <strong style={{color:"#33ff33"}}>11</strong></span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// SCREEN 2 — ASSEMBLY  (target: 67)
+// formula: (input + 7) × 5 - 3 = 67  → input=7
+// ═══════════════════════════════════════════════════
+const ASM_OPS=[
+  {label:"MOV", code:"MOV AX, input",  apply:(ax,v)=>v  },
+  {label:"ADD", code:"ADD AX, 7",      apply:(ax)=>ax+7 },
+  {label:"MUL", code:"MUL AX, 5",      apply:(ax)=>ax*5 },
+  {label:"SUB", code:"SUB AX, 3",      apply:(ax)=>ax-3 },
+  {label:"OUT", code:"OUT AX",         apply:(ax)=>ax   },
+];
+const TARGET=67;
+
+function AssemblyScreen(){
+  const[input,setInput]=useState("");
+  const[step,setStep]=useState(-1);
+  const[axHistory,setAxHistory]=useState([]);
+  const[done,setDone]=useState(false);
+  const[paused,setPaused]=useState(false);
+  const timers=useRef([]);
+  const pausedRef=useRef(false);
+  const stepRef=useRef(-1);
+
+  function clearT(){timers.current.forEach(clearTimeout);timers.current=[];}
+  useEffect(()=>()=>clearT(),[]);
+
+  function scheduleStep(i, v, ax){
+    const t=setTimeout(()=>{
+      if(pausedRef.current){
+        // re-schedule same step after short poll
+        scheduleStep(i, v, ax);
+        return;
+      }
+      const newAx=ASM_OPS[i].apply(ax,v);
+      stepRef.current=i;
+      setStep(i);
+      setAxHistory(prev=>{const n=[...prev];n[i]=newAx;return n;});
+      if(i===ASM_OPS.length-1){
+        setTimeout(()=>{setStep(-1);setDone(true);},600);
+      } else {
+        scheduleStep(i+1, v, newAx);
+      }
+    }, i===0?400:900);
+    timers.current.push(t);
+  }
+
+  function run(){
+    const v=parseInt(input);
+    if(isNaN(v)||v<0||v>999) return;
+    clearT();setDone(false);setStep(-1);setAxHistory([]);
+    pausedRef.current=false;setPaused(false);
+    scheduleStep(0, v, v);
+  }
+
+  function togglePause(){
+    const next=!pausedRef.current;
+    pausedRef.current=next;
+    setPaused(next);
+  }
+
+  const result=axHistory[axHistory.length-1];
+  const success=done&&result===TARGET;
+  const isRunning=step>=0&&!done;
+
+  return(
+    <div style={{width:"100%",maxWidth:760}}>
+      <div style={{textAlign:"center",marginBottom:18}}>
+        <div style={{fontSize:11,...DM,letterSpacing:4,marginBottom:4}}>◄ מכונת הזמן של הקוד ► 1950s</div>
+        <div style={{fontSize:20,fontWeight:"bold",...G,letterSpacing:2}}>אסמבלי — השג {TARGET}</div>
+        <div style={{fontSize:12,color:"#99ff99",marginTop:6}}>
+          הכנס מספר קלט. המטרה: לקבל פלט <span style={{color:"#ffff66",fontWeight:"bold"}}>{TARGET}</span> לאחר החישוב.
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        {/* ASM code */}
+        <Panel title="◄ תוכנית אסמבלי ►">
+          {ASM_OPS.map((op,i)=>{
+            const active=step===i;
+            const past=done||step>i;
+            return(
+              <div key={i} style={{
+                padding:"9px 14px",display:"flex",alignItems:"center",gap:12,
+                direction:"ltr",
+                background:active?"rgba(50,255,50,0.15)":"transparent",
+                borderLeft:`3px solid ${active?"#33ff33":"transparent"}`,
+                transition:"all 0.3s",
+              }}>
+                <span style={{fontSize:13,color:active?"#33ff33":"#99ff99",flex:1,
+                              fontFamily:"'Courier New',monospace",letterSpacing:0.5,
+                              textShadow:active?"0 0 8px #33ff33":"none"}}>{op.code}</span>
+                {axHistory[i]!==undefined&&(
+                  <span style={{fontSize:13,color:"#ffff66",
+                                animation:"fadeUp 0.2s ease-out",fontWeight:"bold",
+                                fontFamily:"'Courier New',monospace"}}>
+                    → {axHistory[i]}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </Panel>
+
+        {/* AX register + result */}
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <Panel title="◄ רגיסטר AX ►" style={{flex:1}}>
+            <div style={{padding:"20px",textAlign:"center",minHeight:100,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {axHistory.length===0?(
+                <div style={{...DM,fontSize:12}}>ממתין להרצה...</div>
+              ):(
+                <div>
+                  <div style={{fontSize:11,...DM,marginBottom:4}}>AX =</div>
+                  <div style={{fontSize:40,...G,textShadow:"0 0 20px #33ff33",animation:"fadeUp 0.2s ease-out"}}>
+                    {axHistory[axHistory.length-1]}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Panel>
+
+          {done&&(
+            <div style={{border:`1px solid ${success?"#33ff33":"#5c1a1a"}`,borderRadius:4,
+                         padding:"16px",textAlign:"center",
+                         background:success?"rgba(0,60,0,0.5)":"rgba(60,0,0,0.4)",
+                         animation:"slideIn 0.3s ease-out"}}>
+              <div style={{fontSize:success?26:18,color:success?"#33ff33":"#ff6666",
+                           textShadow:success?"0 0 16px #33ff33":"none",fontWeight:"bold"}}>
+                {success?"🎉 קיבלת 67!":"לא "+TARGET+"..."}
+              </div>
+              {!success&&<div style={{fontSize:12,color:"#888",marginTop:6}}>קיבלת: {result} — נסה קלט אחר</div>}
+              {success&&<div style={{fontSize:12,color:"#99ffaa",marginTop:6}}>הצלחת! הקלט הנכון: {input}</div>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Input */}
+      <Panel title="◄ הכנס קלט ►">
+        <div style={{padding:"14px",display:"grid",gridTemplateColumns:"1fr auto auto",gap:10,alignItems:"end"}}>
+          <div>
+            <div style={{fontSize:11,...DM,marginBottom:6}}>קלט ראשוני</div>
+            <input value={input} type="number" min="0" placeholder="הכנס מספר..."
+                   onChange={e=>setInput(e.target.value)} style={{direction:"ltr",textAlign:"center",fontSize:18,
+                     background:"#030803",color:"#33ff33",border:"1px solid #1a5c1a",padding:"8px 12px",width:"100%",fontFamily:"monospace",outline:"none"}}
+                   onKeyDown={e=>e.key==="Enter"&&run()}/>
+          </div>
+          <button className="btn-green" onClick={run} disabled={!input||(isRunning&&!paused)} style={{padding:"12px 20px",fontSize:16}}>
+            ▶ הרץ
+          </button>
+          {isRunning&&(
+            <button onClick={togglePause} style={{
+              background:paused?"rgba(50,255,50,0.15)":"rgba(255,200,0,0.15)",
+              border:paused?"1px solid #33ff33":"1px solid #ffcc00",
+              color:paused?"#33ff33":"#ffcc00",
+              padding:"12px 16px",fontSize:14,fontFamily:"monospace",
+              textShadow:paused?"0 0 8px #33ff33":"0 0 8px #ffcc00",
+              cursor:"pointer",transition:"all 0.2s",
+            }}>
+              {paused?"▶ המשך":"⏸ עצור"}
+            </button>
+          )}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// SCREEN 3 — C BUG HUNT (pseudo-C blocks)
+// ═══════════════════════════════════════════════════
+const C_CODE=[
+  {id:1,   text:"i = 1;",               bug:false,section:false},
+  {id:null,text:"[ תחילת לולאה ]",      bug:false,section:true},
+  {id:2,   text:"  while (???) {",      bug:true, section:false},
+  {id:3,   text:'    printf("%d", i);', bug:false,section:false},
+  {id:4,   text:"    i = i + 1;",       bug:false,section:false},
+  {id:5,   text:"  }",                  bug:false,section:false},
+  {id:null,text:"[ סיום לולאה ]",       bug:false,section:true},
+];
+const C_REVEAL=[
+  {text:"i = 1;"},
+  {text:"while (i <= 5) {",fixed:true},
+  {text:"    הדפס את i;"},
+  {text:"    i = i + 1;"},
+  {text:"}"},
+];
+const C_BLOCKS=[
+  {id:"gt5", label:"כל עוד i גדול מ-5",          code:"while (i > 5)",  sim:{type:"blink"},               correct:false},
+  {id:"lt5", label:"כל עוד i קטן מ-5",            code:"while (i < 5)",  sim:{type:"finite",nums:[1,2,3,4]},correct:false},
+  {id:"lte5",label:"כל עוד i קטן או שווה ל-5",   code:"while (i <= 5)", sim:{type:"finite",nums:[1,2,3,4,5]},correct:true},
+  {id:"gt10",label:"כל עוד i גדול מ-10",          code:"while (i > 10)", sim:{type:"blink"},               correct:false},
+];
+
+function CBugScreen(){
+  const[selectedId,setSelected]=useState(null);
+  const[output,setOutput]=useState([]);
+  const[simState,setSimState]=useState("idle");
+  const ivRef=useRef(null);
+  const outRef=useRef(null);
+
+  useEffect(()=>{if(outRef.current)outRef.current.scrollTop=outRef.current.scrollHeight;},[output]);
+  useEffect(()=>()=>clearTimeout(ivRef.current),[]);
+
+  function selectBlock(id){clearTimeout(ivRef.current);setSelected(id);setOutput([]);setSimState("idle");}
+
+  function run(){
+    if(!selectedId||simState==="running")return;
+    const block=C_BLOCKS.find(b=>b.id===selectedId);
+    clearTimeout(ivRef.current);setOutput([]);setSimState("running");
+    if(block.sim.type==="blink"){ivRef.current=setTimeout(()=>setSimState("done"),2500);return;}
+    function emit(idx){
+      if(idx>=block.sim.nums.length){setSimState("done");return;}
+      setOutput(prev=>[...prev,block.sim.nums[idx]]);
+      ivRef.current=setTimeout(()=>emit(idx+1),300);
+    }
+    emit(0);
+  }
+
+  const selected=C_BLOCKS.find(b=>b.id===selectedId);
+  const isRunning=simState==="running";
+  const isDone=simState==="done";
+  const isBlink=selected?.sim.type==="blink";
+
+  // Arduino IDE light theme
+  const ARD={
+    bg:"#ffffff", bg2:"#f5f5f5", bg3:"#eeeeee",
+    border:"#cccccc", border2:"#aaaaaa",
+    toolbar:"#00979D", toolbar2:"#006E74",
+    num:"#999999",
+    kw:"#00878A",        // keywords - Arduino teal
+    type:"#E47128",      // types/vars - Arduino orange
+    num_lit:"#4a7b9d",   // number literals
+    op:"#333333",        // operators
+    text:"#333333",      // normal text
+    comment:"#888888",   // comments
+    active_bg:"#d0eef0", // active line
+    active_border:"#00979D",
+    bug_bg:"#fff3e0",
+    bug_border:"#E47128",
+    tab:"#00979D",
+  };
+
+  // Arduino-style syntax coloring for each code line
+  function renderArdLine(line, hasBlock, displayText, isBugActive){
+    if(line.section) return(
+      <div style={{padding:"2px 0 2px 8px",fontSize:11,color:ARD.comment,
+                   background:ARD.bg2,letterSpacing:1,fontStyle:"italic",
+                   direction:"ltr",textAlign:"left"}}>
+        &nbsp;&nbsp;&nbsp;&nbsp;{'// '}{line.text.replace(/[\[\]]/g,"")}
+      </div>
+    );
+
+    const id = line.id;
+    // Syntax-color the display text
+    let content;
+    if(line.bug){
+      if(!hasBlock){
+        content = <span>
+          <span style={{color:ARD.kw}}>  while </span>
+          <span style={{color:ARD.op}}>(</span>
+          <span style={{color:"#ff6b6b"}}>???</span>
+          <span style={{color:ARD.op}}>)</span>
+          <span style={{color:ARD.op}}> {"{"}</span>
+        </span>;
+      } else {
+        // Parse selected.code e.g. "while (i <= 5)" to display with syntax coloring
+        const code = selected.code; // e.g. "while (i <= 5)"
+        const inner = code.replace(/^while\s*\(/, "").replace(/\)$/, ""); // e.g. "i <= 5"
+        content = <span>
+          <span style={{color:ARD.kw}}>  while </span>
+          <span style={{color:ARD.op}}>(</span>
+          <span style={{color:ARD.type,fontFamily:"monospace"}}>{inner}</span>
+          <span style={{color:ARD.op}}>)</span>
+          <span style={{color:ARD.op}}> {"{"}</span>
+        </span>;
+      }
+    } else if(id===1){
+      content=<span>
+        <span style={{color:ARD.type}}>i</span>
+        <span style={{color:ARD.op}}> = </span>
+        <span style={{color:ARD.num_lit}}>1</span>
+        <span style={{color:ARD.op}}>;</span>
+      </span>;
+    } else if(id===3){
+      content=<span>
+        <span style={{color:ARD.kw}}>    printf</span>
+        <span style={{color:ARD.op}}>(</span>
+        <span style={{color:"#6a9955"}}>"%d"</span>
+        <span style={{color:ARD.op}}>, </span>
+        <span style={{color:ARD.type}}>i</span>
+        <span style={{color:ARD.op}}>);</span>
+      </span>;
+    } else if(id===4){
+      content=<span>
+        <span style={{color:ARD.type}}>    i</span>
+        <span style={{color:ARD.op}}> = </span>
+        <span style={{color:ARD.type}}>i</span>
+        <span style={{color:ARD.op}}> + </span>
+        <span style={{color:ARD.num_lit}}>1</span>
+        <span style={{color:ARD.op}}>;</span>
+      </span>;
+    } else if(id===5){
+      content=<span style={{color:ARD.op}}>{"  }"}</span>;
+    } else {
+      content=<span style={{color:ARD.text}}>{displayText}</span>;
+    }
+
+    const isActiveBug = line.bug && hasBlock;
+    const isPendingBug = line.bug && !hasBlock;
+
+    return(
+      <div style={{
+        padding:"5px 0",
+        display:"flex",alignItems:"center",
+        direction:"ltr",
+        background: isActiveBug ? ARD.active_bg : isPendingBug ? ARD.bug_bg : "transparent",
+        borderLeft: isActiveBug ? `3px solid ${ARD.active_border}`
+                  : isPendingBug ? `3px solid ${ARD.bug_border}`
+                  : "3px solid transparent",
+        animation: isPendingBug ? "flashBug 2s ease-in-out infinite" : "none",
+        transition:"all 0.3s",
+      }}>
+        <span style={{color:ARD.num,fontSize:11,minWidth:32,textAlign:"right",
+                      paddingRight:12,flexShrink:0,userSelect:"none"}}>{id}</span>
+        <span style={{fontFamily:"'Courier New',monospace",fontSize:13,direction:"ltr",textAlign:"left"}}>
+          {line.bug&&!hasBlock&&<span style={{color:"#ff6b6b",marginRight:4}}>⚠</span>}
+          {content}
+        </span>
+      </div>
+    );
+  }
+
+  return(
+    <div style={{width:"100%",maxWidth:780}}>
+      <div style={{textAlign:"center",marginBottom:14}}>
+        <div style={{fontSize:11,color:"#00979D",letterSpacing:4,marginBottom:4}}>◄ מכונת הזמן של הקוד ► 1970s</div>
+        <div style={{fontSize:20,fontWeight:"bold",color:"#00979D",letterSpacing:2}}>שפת C</div>
+      </div>
+
+      {/* Mission bar - Arduino style */}
+      <div style={{border:`1px solid #00979D`,background:"#e8f7f7",borderRadius:3,
+                   padding:"10px 16px",marginBottom:12,fontSize:13,color:"#333",lineHeight:1.7,direction:"rtl"}}>
+        <span style={{color:"#00979D",fontWeight:"bold"}}>// משימה: </span>
+        הקוד אמור להדפיס את המספרים 1 עד 5.{" "}
+        בחר בלוק מהמחסן, לחץ <strong style={{color:"#00979D"}}>◄ הרץ</strong> — ראה מה קורה.
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+
+        {/* Arduino IDE editor panel */}
+        <div style={{border:`1px solid ${ARD.border}`,borderRadius:3,overflow:"hidden",background:ARD.bg}}>
+          {/* Tab bar */}
+          <div style={{background:ARD.toolbar,display:"flex",alignItems:"center",borderBottom:`1px solid ${ARD.border}`}}>
+            <div style={{padding:"6px 16px",fontSize:12,color:"#fff",background:"rgba(0,0,0,0.15)",
+                         borderBottom:`2px solid #fff`,fontFamily:"monospace"}}>
+              sketch.c
+            </div>
+            <div style={{flex:1}}/>
+            <div style={{padding:"0 10px",fontSize:11,color:"rgba(255,255,255,0.7)"}}>C</div>
+          </div>
+          {/* Code */}
+          <div style={{padding:"8px 0"}}>
+            {C_CODE.map((line,i)=>{
+              const hasBlock=line.bug&&selectedId;
+              const displayText=line.bug?(selectedId?`  ${selected.code} {`:"  while (???) {"):line.text;
+              return <div key={i}>{renderArdLine(line,hasBlock,displayText,hasBlock)}</div>;
+            })}
+          </div>
+        </div>
+
+        {/* Output panel - Arduino serial monitor style */}
+        <div style={{border:`1px solid ${ARD.border}`,borderRadius:3,overflow:"hidden",background:ARD.bg}}>
+          <div style={{background:ARD.toolbar,padding:"6px 12px",fontSize:12,color:"#fff",
+                       borderBottom:`1px solid ${ARD.border}`,fontFamily:"monospace",
+                       textAlign:"left",direction:"ltr"}}>
+            Serial Monitor (9600)
+          </div>
+          <div ref={outRef} style={{padding:"10px 14px",minHeight:140,maxHeight:200,overflowY:"auto",
+                                    display:"flex",flexWrap:"wrap",gap:4,alignContent:"flex-start",
+                                    direction:"ltr",background:ARD.bg}}>
+            {simState==="idle"&&<div style={{color:ARD.num,fontSize:12,width:"100%",textAlign:"center",marginTop:34,fontFamily:"monospace"}}>
+              // waiting for input...
+            </div>}
+            {output.map((n,i)=>(
+              <span key={i} style={{fontSize:20,color:ARD.kw,fontFamily:"monospace",
+                animation:i===output.length-1?"fadeUp 0.12s ease-out":"none",lineHeight:1.6}}>{n}</span>
+            ))}
+            {isRunning&&<span style={{fontSize:18,color:ARD.num,animation:"blink 0.45s step-end infinite",alignSelf:"center",fontFamily:"monospace"}}>█</span>}
+            {isDone&&<div style={{width:"100%",marginTop:output.length>0?8:30,fontSize:11,
+                                  color:ARD.comment,fontFamily:"monospace",animation:"fadeUp 0.3s ease-out"}}>
+              // done.
+            </div>}
+          </div>
+        </div>
+      </div>
+
+      {/* Block warehouse - Arduino toolbar style */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,alignItems:"start",marginBottom:14}}>
+        <div>
+          <div style={{fontSize:11,color:ARD.num,letterSpacing:2,marginBottom:8,fontFamily:"monospace"}}>
+            // בחר תנאי לשורה 2:
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {C_BLOCKS.map(block=>{
+              const active=selectedId===block.id;
+              return(
+                <button key={block.id} onClick={()=>selectBlock(block.id)} style={{
+                  background:active?ARD.active_bg:ARD.bg2,
+                  border:active?`1px solid ${ARD.active_border}`:`1px solid ${ARD.border}`,
+                  color:active?"#fff":ARD.text,
+                  padding:"9px 14px",fontSize:14,textAlign:"right",direction:"rtl",
+                  fontFamily:"'Courier New',monospace",
+                  transition:"all 0.15s",width:"100%",borderRadius:2}}>
+                  {active?"▶ ":"   "}{block.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{paddingTop:28}}>
+          <button onClick={run} disabled={!selectedId||isRunning} style={{
+            background:isRunning?ARD.bg3:ARD.tab,
+            border:`1px solid ${isRunning?ARD.border:ARD.tab}`,
+            color:"#fff",padding:"10px 20px",fontSize:14,
+            cursor:(!selectedId||isRunning)?"not-allowed":"pointer",
+            fontFamily:"monospace",borderRadius:3,
+            opacity:(!selectedId||isRunning)?0.5:1,
+            transition:"all 0.15s",
+          }}>
+            {isRunning?"רץ...":"◄ הרץ"}
+          </button>
+        </div>
+      </div>
+
+      {/* Explanation - Arduino comment style */}
+      <div style={{border:`1px solid ${ARD.border}`,borderRadius:3,background:ARD.bg,padding:"14px 16px",direction:"rtl"}}>
+        <div style={{fontSize:12,color:ARD.comment,fontFamily:"monospace",marginBottom:8}}>/* הסבר הקוד */</div>
+        <div style={{fontSize:13,color:ARD.text,lineHeight:2,fontFamily:"monospace"}}>
+          <span style={{color:ARD.num}}>1: </span>
+          <span style={{color:ARD.type}}>i</span>
+          <span style={{color:ARD.op}}> = </span>
+          <span style={{color:ARD.num_lit}}>1</span>
+          <span style={{color:ARD.op}}>;</span>
+          <span style={{color:ARD.comment}}> &nbsp;// הגדרנו משתנה i עם הערך ההתחלתי 1</span><br/>
+          <span style={{color:ARD.num}}>2: </span>
+          <span style={{color:ARD.kw}}>while</span>
+          <span style={{color:ARD.op}}>(תנאי)</span>
+          <span style={{color:ARD.comment}}> &nbsp;// שורות 3+4 יתבצעו רק אם התנאי בשורה הזאת מתקיים — כאן צריך להכניס את התנאי הנכון</span><br/>
+          <span style={{color:ARD.num}}>3: </span>
+          <span style={{color:ARD.kw}}>printf</span>
+          <span style={{color:ARD.op}}>(</span>
+          <span style={{color:"#6a9955"}}>"%d"</span>
+          <span style={{color:ARD.op}}>, </span>
+          <span style={{color:ARD.type}}>i</span>
+          <span style={{color:ARD.op}}>);</span>
+          <span style={{color:ARD.comment}}> &nbsp;// בכל סיבוב — מדפיסים את הערך הנוכחי של i</span><br/>
+          <span style={{color:ARD.num}}>4: </span>
+          <span style={{color:ARD.type}}>i</span>
+          <span style={{color:ARD.op}}> = </span>
+          <span style={{color:ARD.type}}>i</span>
+          <span style={{color:ARD.op}}> + </span>
+          <span style={{color:ARD.num_lit}}>1</span>
+          <span style={{color:ARD.op}}>;</span>
+          <span style={{color:ARD.comment}}> &nbsp;// מוסיפים 1 ל-i, כדי שבסיבוב הבא i יהיה שווה 1 יותר מהערך הקודם שלו</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// SCREEN 4 — PYTHON LED (B&W theme, 500ms delay)
+// ═══════════════════════════════════════════════════
+const LED_CODE=[
+  {id:0,text:"led = False",            loop:false},
+  {id:1,text:"while True:",            loop:true},
+  {id:2,text:'    if button == "ON":', loop:true},
+  {id:3,text:"        led = True",     loop:true},
+  {id:4,text:'    if button == "OFF":',loop:true},
+  {id:5,text:"        led = False",    loop:true},
+  {id:6,text:"    show(led)",          loop:true},
+];
+
+function PythonLEDScreen(){
+  const[led,setLed]=useState(false);
+  const[btnState,setBtnState]=useState(null);
+  const[curLine,setCurLine]=useState(null);
+  const[running,setRunning]=useState(false);
+  const btnRef=useRef(null);
+  const ledRef=useRef(false);
+  const loopRef=useRef(null);
+  const activeRef=useRef(false);
+
+  function stopLoop(){
+    activeRef.current=false;
+    clearTimeout(loopRef.current);
+    setRunning(false);setCurLine(null);
+  }
+
+  function runIteration(){
+    if(!activeRef.current) return;
+    const btn=btnRef.current;
+    const seq=[1,2];
+    if(btn==="ON") seq.push(3);
+    seq.push(4);
+    if(btn==="OFF") seq.push(5);
+    seq.push(6);
+
+    let delay=0;
+    seq.forEach((lineId,i)=>{
+      loopRef.current=setTimeout(()=>{
+        if(!activeRef.current) return;
+        setCurLine(lineId);
+        // only update LED state when reaching show(led) — line 6
+        // uses 'btn' captured at iteration start, so mid-iteration presses take effect next round
+        if(lineId===6){
+          if(btn==="ON"){ledRef.current=true;setLed(true);}
+          else if(btn==="OFF"){ledRef.current=false;setLed(false);}
+        }
+        if(i===seq.length-1){
+          loopRef.current=setTimeout(()=>{if(activeRef.current)runIteration();},500);
+        }
+      },delay);
+      delay+=500;
+    });
+  }
+
+  function startStop(){
+    if(running){stopLoop();}
+    else{activeRef.current=true;setRunning(true);runIteration();}
+  }
+
+  function toggleLed(){
+    const next = btnRef.current === "ON" ? "OFF" : "ON";
+    setBtnState(next);
+    btnRef.current = next;
+  }
+
+  useEffect(()=>()=>{activeRef.current=false;clearTimeout(loopRef.current);},[]);
+
+  // B&W / Python theme colors
+  const BG="#0d0d0d";
+  const FG="#e8e8e8";
+  const DIM="#555";
+  const ACT="#ffffff";
+
+  return(
+    <div style={{width:"100%",maxWidth:780,color:FG}}>
+      <div style={{textAlign:"center",marginBottom:18}}>
+        <div style={{fontSize:11,color:"#555",letterSpacing:4,marginBottom:4}}>◄ מכונת הזמן של הקוד ► 2000s</div>
+        <div style={{fontSize:20,fontWeight:"bold",color:FG,letterSpacing:2}}>Python — נורת LED</div>
+      </div>
+      <div style={{border:"1px solid #333",borderRadius:4,background:"#111",padding:"10px 16px",marginBottom:14,fontSize:13,color:"#aaa",lineHeight:1.7,direction:"rtl"}}>
+        Python היא שפת תכנות פופולרית ופשוטה לקריאה. הקוד רץ שורה אחרי שורה בלולאה אינסופית — ממש כמו מיקרובקר שמחכה לפקודות.
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        {/* LED + controls */}
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{border:`1px solid ${DIM}`,borderRadius:4,overflow:"hidden",background:BG}}>
+            <div style={{background:"#111",padding:"5px 12px",fontSize:11,color:DIM,letterSpacing:3,borderBottom:`1px solid ${DIM}`}}>◄ נורת LED ►</div>
+            <div style={{padding:"24px",display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
+              <div style={{
+                width:90,height:90,borderRadius:"50%",
+                background:led?"radial-gradient(circle at 35% 35%, #ffee44, #ffaa00)":"radial-gradient(circle at 35% 35%, #2a2a2a, #111)",
+                boxShadow:led?"0 0 30px #ffaa00,0 0 60px #ff880088,0 0 4px #fff":"0 0 4px #000",
+                animation:led?"glow 1.5s ease-in-out infinite":"none",
+                transition:"all 0.3s",
+                border:`2px solid ${led?"#ff8800":"#333"}`,
+              }}/>
+              <div style={{fontSize:14,letterSpacing:2,color:led?"#ffcc00":"#444",
+                           textShadow:led?"0 0 8px #ffaa00":"none"}}>
+                {led?"● דולקת":"○ כבויה"}
+              </div>
+              <button onClick={toggleLed} style={{
+                background: btnState==="ON" ? "rgba(255,200,0,0.2)" : "rgba(30,30,30,0.8)",
+                border: btnState==="ON" ? "2px solid #ffcc00" : "2px solid #555",
+                color: btnState==="ON" ? "#ffcc00" : "#888",
+                padding:"12px 32px", fontSize:15, fontFamily:"monospace",
+                textShadow: btnState==="ON" ? "0 0 8px #ffcc00" : "none",
+                transition:"all 0.2s", letterSpacing:2, borderRadius:3,
+                minWidth:120,
+              }}>
+                {btnState==="ON" ? "● ON" : "○ OFF"}
+              </button>
+            </div>
+          </div>
+
+          <button onClick={startStop} style={{
+            background:running?"rgba(200,50,50,0.15)":"rgba(200,200,200,0.1)",
+            border:running?"1px solid #ff4444":"1px solid #888",
+            color:running?"#ff6666":FG,
+            padding:"12px",fontSize:14,width:"100%",letterSpacing:2,fontFamily:"monospace",
+            textShadow:running?"0 0 8px #ff4444":"none",
+          }}>
+            {running?"■ עצור הרצה":"▶ הרץ תוכנית"}
+          </button>
+        </div>
+
+        {/* Python code */}
+        <div style={{border:`1px solid ${DIM}`,borderRadius:4,overflow:"hidden",background:BG}}>
+          <div style={{background:"#111",padding:"5px 12px",fontSize:11,color:DIM,letterSpacing:3,borderBottom:`1px solid ${DIM}`}}>
+            ◄ קוד Python ►
+          </div>
+          {LED_CODE.map(line=>{
+            const isActive=curLine===line.id;
+            return(
+              <div key={line.id} style={{
+                padding:"8px 14px",fontSize:13,direction:"ltr",textAlign:"left",
+                background:isActive?"rgba(255,255,255,0.1)":"transparent",
+                borderLeft:`3px solid ${isActive?ACT:"transparent"}`,
+                color:isActive?ACT:line.loop?FG:DIM,
+                transition:"background 0.15s,color 0.15s",
+                display:"flex",gap:8,alignItems:"center",
+                fontFamily:"'Courier New',monospace",
+              }}>
+                <span style={{color:"#444",fontSize:10,minWidth:12,flexShrink:0}}>{line.id}</span>
+                {isActive&&<span style={{fontSize:9,color:ACT,flexShrink:0}}>▶</span>}
+                <span style={{color:isActive?"#ffffff":line.loop?"#cccccc":"#555555"}}>{line.text}</span>
+              </div>
+            );
+          })}
+          {running&&(
+            <div style={{padding:"6px 14px",fontSize:11,color:DIM,borderTop:`1px solid ${DIM}`,display:"flex",alignItems:"center",gap:6}}>
+              <span style={{animation:"blink 0.5s step-end infinite"}}>█</span>
+              <span>רץ בלולאה...</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// SCREEN 5 — LLM CARDS (modern colorful design)
+// ═══════════════════════════════════════════════════
+const LLM_CARDS=[
+  {icon:"🎯", title:"היה ספציפי",      accent:"#4f8ef7",
+   back:"תאר בדיוק מה אתה צריך. 'כתוב שיר' ← 'שיר על כלב, 4 בתים, בגוף ראשון'. ספציפיות = תוצאה טובה יותר."},
+  {icon:"📋", title:"תן הקשר",         accent:"#a78bfa",
+   back:"LLM לא יודע כלום עליך. ספר לו: מי אתה, מה המטרה, לאיזה קהל. 'אני תלמיד כיתה ה, צריך הסבר פשוט על...'"},
+  {icon:"🔄", title:"עבודה תהליכית",  accent:"#34d399",
+   back:"אל תצפה לשלמות בפעם הראשונה. קבל תשובה ← שפר ← בקש שינויים. זה תהליך, לא קסם."},
+  {icon:"🔍", title:"בדוק עובדות",     accent:"#fb923c",
+   back:"LLM יכול לטעות בלי לדעת שהוא טועה. עובדות, תאריכים ומספרים חשובים — תמיד לאמת במקור אחר."},
+  {icon:"🧠", title:"אתה הבוס",        accent:"#f472b6",
+   back:"ה-LLM הוא כלי, לא תחליף לחשיבה. השתמש בו לעזרה, לא כדי לחשוב במקומך. הדעה שלך חשובה!"},
+  {icon:"⏰", title:"יש לו גבולות",    accent:"#94a3b8",
+   back:"הידע של LLM מעודכן עד תאריך מסוים — הוא לא יודע מה קרה אחרי כן. לחדשות עדכניות — עדיף לחפש בגוגל."},
+];
+
+function LLMScreen(){
+  const[flipped,setFlipped]=useState(Array(LLM_CARDS.length).fill(false));
+  const[allFlipped,setAllFlipped]=useState(false);
+
+  function toggleCard(i){setFlipped(f=>{const n=[...f];n[i]=!n[i];return n;});}
+  function flipAll(){const next=!allFlipped;setAllFlipped(next);setFlipped(Array(LLM_CARDS.length).fill(next));}
+
+  return(
+    <div style={{width:"100%",maxWidth:720}}>
+      <div style={{textAlign:"center",marginBottom:24}}>
+        <div style={{fontSize:11,color:"#555",letterSpacing:4,marginBottom:6}}>◄ מכונת הזמן של הקוד ► 2020s</div>
+        <div style={{fontSize:22,fontWeight:"700",color:"#f0f0f0",fontFamily:"sans-serif",letterSpacing:1}}>
+          בינה מלאכותית — כללי זהב
+        </div>
+        <div style={{fontSize:13,color:"#666",marginTop:8,fontFamily:"sans-serif"}}>לחץ על כרטיסייה כדי לגלות את הכלל</div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
+        {LLM_CARDS.map((card,i)=>(
+          <div key={i} className="card-flip" style={{height:160}} onClick={()=>toggleCard(i)}>
+            <div className={`card-inner${flipped[i]?" flipped":""}`} style={{width:"100%",height:"100%"}}>
+              {/* Front */}
+              <div className="card-face" style={{
+                background:"#16161e",
+                border:`1px solid ${card.accent}44`,
+                boxShadow:`0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 ${card.accent}22`,
+              }}>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:30,marginBottom:10}}>{card.icon}</div>
+                  <div style={{fontSize:15,fontWeight:"600",color:"#f0f0f0",fontFamily:"sans-serif",
+                               letterSpacing:0.5,marginBottom:6}}>
+                    {card.title}
+                  </div>
+                  <div style={{fontSize:11,color:card.accent,fontFamily:"sans-serif",opacity:0.8}}>
+                    לחץ לגלות ▾
+                  </div>
+                </div>
+                {/* Accent line at bottom */}
+                <div style={{position:"absolute",bottom:0,left:0,right:0,height:3,
+                             background:card.accent,borderRadius:"0 0 12px 12px",opacity:0.7}}/>
+              </div>
+              {/* Back */}
+              <div className="card-face card-back" style={{
+                background:"#1a1a24",
+                border:`1px solid ${card.accent}66`,
+                boxShadow:`0 4px 20px rgba(0,0,0,0.4)`,
+                padding:"14px 12px",
+              }}>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:12,color:"#d0d0d0",lineHeight:1.75,fontFamily:"sans-serif",
+                               direction:"rtl",overflowWrap:"break-word",wordBreak:"break-word"}}>
+                    <span style={{fontSize:15,display:"block",marginBottom:6}}>{card.icon}</span>
+                    {card.back}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={flipAll} style={{
+        width:"100%",padding:"14px",fontSize:14,fontFamily:"sans-serif",fontWeight:"600",
+        background:allFlipped?"#1a1a24":"#1e293b",
+        border:`1px solid ${allFlipped?"#334":"#475569"}`,
+        color:allFlipped?"#666":"#94a3b8",
+        transition:"all 0.3s",borderRadius:8,letterSpacing:0.5,
+      }}>
+        {allFlipped?"הסתר את כל הכללים ▲":"גלה את כל הכללים ▼"}
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// APP SHELL + NAVIGATION
+// ═══════════════════════════════════════════════════
+function App(){
+  const[screen,setScreen]=useState(0);
+  const comps=[BinaryScreen,AssemblyScreen,CBugScreen,PythonLEDScreen,LLMScreen];
+  const Screen=comps[screen];
+  const isPy=screen===3;
+  const isLLM=screen===4;
+  const isC=screen===2;
+
+  return(
+    <div style={{
+      minHeight:"100vh",
+      background: isLLM?"#0a0a14":isPy?"#0d0d0d":isC?"#f0f0f0":"#050a05",
+      fontFamily:"'Courier New',monospace",
+      color: isLLM?"#fff":isPy?"#e8e8e8":isC?"#333":"#33ff33",
+      direction:"rtl",display:"flex",flexDirection:"column",
+      alignItems:"center",padding:"0 16px 40px",
+      transition:"background 0.4s,color 0.4s",
+    }}>
+      {/* CRT effect (only on green screens) */}
+      {!isPy&&!isLLM&&!isC&&<>
+        <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:100,
+          background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px)"}}/>
+        <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:99,
+          background:"radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,0.7) 100%)"}}/>
+      </>}
+
+      {/* Nav bar */}
+      <div style={{
+        width:"100%",maxWidth:780,position:"sticky",top:0,zIndex:50,
+        background: isLLM?"rgba(10,10,20,0.97)":isPy?"rgba(13,13,13,0.97)":isC?"rgba(240,240,240,0.97)":"rgba(5,10,5,0.97)",
+        borderBottom: isLLM?"1px solid #333":isPy?"1px solid #333":isC?"1px solid #00979D":"1px solid #1a5c1a",
+        padding:"10px 0",marginBottom:22,
+        display:"flex",alignItems:"center",justifyContent:"space-between",
+      }}>
+        <button onClick={()=>setScreen(s=>Math.max(0,s-1))} disabled={screen===0} style={{
+          background:"transparent",
+          border: isLLM?"1px solid #333":isPy?"1px solid #333":isC?"1px solid #00979D":"1px solid #1a5c1a",
+          color: screen===0?(isLLM?"#333":isPy?"#333":isC?"#aaa":"#1a3c1a"):(isLLM?"#aaa":isPy?"#aaa":isC?"#00979D":"#99ff99"),
+          padding:"7px 14px",fontSize:13,fontFamily:"monospace",letterSpacing:1,
+          cursor:screen===0?"not-allowed":"pointer",
+        }}>▶ הקודם</button>
+
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:13,
+                       color:isLLM?"#fff":isPy?"#e8e8e8":isC?"#00979D":"#33ff33",
+                       textShadow:isLLM?"none":isPy?"none":isC?"none":"0 0 8px #33ff33",
+                       letterSpacing:2,marginBottom:5}}>
+            {SCREENS[screen].era} — {SCREENS[screen].label}
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+            {SCREENS.map((_,i)=>(
+              <div key={i} onClick={()=>setScreen(i)} style={{
+                width:i===screen?18:8,height:8,borderRadius:4,
+                background:i===screen?(isLLM?"#667eea":isPy?"#fff":isC?"#00979D":"#33ff33"):(isLLM?"#333":isPy?"#333":isC?"#ccc":"#1a5c1a"),
+                boxShadow:i===screen?(isLLM?"0 0 8px #667eea":isPy?"0 0 8px #fff":isC?"0 0 8px #00979D":"0 0 8px #33ff33"):"none",
+                cursor:"pointer",transition:"all 0.3s",
+              }}/>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={()=>setScreen(s=>Math.min(4,s+1))} disabled={screen===4} style={{
+          background:"transparent",
+          border: isLLM?"1px solid #333":isPy?"1px solid #333":isC?"1px solid #00979D":"1px solid #1a5c1a",
+          color: screen===4?(isLLM?"#333":isPy?"#333":isC?"#aaa":"#1a3c1a"):(isLLM?"#aaa":isPy?"#aaa":isC?"#00979D":"#99ff99"),
+          padding:"7px 14px",fontSize:13,fontFamily:"monospace",letterSpacing:1,
+          cursor:screen===4?"not-allowed":"pointer",
+        }}>הבא ◄</button>
+      </div>
+
+      <Screen/>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
